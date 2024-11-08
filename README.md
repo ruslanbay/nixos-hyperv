@@ -2,10 +2,7 @@
 
 #linux #nix #nixos #hyper-v
 
-<figure style="float: left; margin-right: 15px; margin-left: 5px;">
-    <img src="article-assets/frankenstein.jpg" alt="nixOS" style="width: 340px; height: 415px; object-fit: cover; object-position: center;" />
-    <figcaption style="font-size: 12px;"><i>Знаю, немного опоздал с хелоуинской тематикой =)</i></figcaption>
-</figure>
+<img src="article-assets/frankenstein.jpg" alt="nixOS" title="Знаю, немного опоздал с хелоуинской тематикой =)" style="width: 340px; height: 415px; float: left; margin-right: 15px; margin-left: 5px;" />
 
 Хочу поделиться опытом развёртывания NixOS. В отличии от традиционных дистрибутивов, NixOS позволяет получить полностью кастомную операционную систему. Конфигурация системы описывается в виде кода. Этот подход обеспечивает предсказуемую, повторяемую сборку.
 
