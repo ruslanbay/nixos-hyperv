@@ -300,6 +300,8 @@ sudo nixos-rebuild switch -I nixos-config=/etc/nixos/configuration.nix
 reboot
 ```
 
+<img src="article-assets/itsalive.jpg" />
+
 ## Ссылки
  - [NixOS Manual](https://nixos.org/manual/nixos/stable/)
  - [NixOS Wiki](https://wiki.nixos.org/wiki/NixOS_Wiki)
