@@ -3,7 +3,7 @@
 #linux #nix #nixos #hyper-v
 
 <figure style="float: left; margin-right: 15px; margin-left: 5px;">
-    <img src="frankenstein.jpg" alt="nixOS" style="width: 340px; height: 415px; object-fit: cover; object-position: center;" />
+    <img src="article-assets/frankenstein.jpg" alt="nixOS" style="width: 340px; height: 415px; object-fit: cover; object-position: center;" />
     <figcaption style="font-size: 12px;"><i>Знаю, немного опоздал с хелоуинской тематикой =)</i></figcaption>
 </figure>
 
@@ -90,7 +90,10 @@ ls -lah /mnt/etc/nixos/*.nix
 В Сети по запросу "nixos hyper-v" множество примеров устаревших конфигураций с различными workaround, которые больше не актуальны. NixOS автоматически определит виртуальную машину Hyper-V, вы можете убедиться в этом по наличию строки `virtualisation.hypervGuest.enable = true;` в файле `/etc/nixos/hardware-configuration.nix`
 
 ### 7. Customising configuration.nix <sup>[[doc]](https://nixos.org/manual/nixos/stable/#ch-configuration)</sup>
-Модифицируем полученный configuration.nix. 
+Модифицируем `/mnt/etc/nixos/configuration.nix`
+```bash
+nano /mnt/etc/nixos/configuration.nix
+```
 
 #### 7.1. Automatic Upgrades <sup>[[doc]](https://nixos.org/manual/nixos/stable/#sec-upgrading-automatic)</sup>
 
@@ -160,9 +163,13 @@ services.pipewire = {
 };
 ```
 
-#### 7.5. Define a user account <sup>[[doc]]()</sup>
+#### 7.5. Define a user account
 
-Для каждого пользователя 
+Создадим двух пользователей: admin и user. Пароль я указал только в качестве примера. В нормальном сценарии после завершения установки системы пользователь входит в систему и задаёт пароль с помощью `passwd`. Пользователь admin имеет повышенные привелегии, так как находится в группе wheel.
+
+Одно из преимуществ NixOS - возможность установить приложения изолированно для каждого пользовтеля. Например, вы можете создать отдельного пользователя для банковских приложений, для Steam и так далее.
+
+Для поиска приложений воспользуйтесь https://search.nixos.org/packages
 
 https://github.com/ruslanbay/nixos-hyperv/blob/main/configuration.nix?plain=1#L101
 
@@ -176,7 +183,18 @@ users.users.admin = {
   #  vim
   ];
 };
+
+users.users.user = {
+  password = "user"; # This option should only be used for public accounts!
+  isNormalUser = true;
+  extraGroups = [ "video" ];
+  packages = with pkgs; [
+  #  steam
+  ];
+};
 ```
+
+Для корректной работы gdm необходимо добавить gdm и всех созданных пользователей в группу video:
 
 ```nix
 users.users.gdm = {
@@ -184,64 +202,111 @@ users.users.gdm = {
 };
 ```
 
-Применим изменения из configuration.nix:
+#### 7.6. List packages installed in system profile
+
+Вы можете перечислить системные приложения:
+
+https://github.com/ruslanbay/nixos-hyperv/blob/main/configuration.nix?plain=1#L127
+
+```nix
+# List packages installed in system profile. To search, run:
+# $ nix search wget
+environment.systemPackages = with pkgs; [
+  # gnome.nautilus
+  gnome-console
+  firefox-unwrapped
+];
+```
+
+#### 7.7. Enable the OpenSSH daemon <sup>[[doc]](https://wiki.nixos.org/wiki/SSH_public_key_authentication#SSH_server_config)</sup>
+
+https://github.com/ruslanbay/nixos-hyperv/blob/main/configuration.nix?plain=1#L143
+
+```nix
+# Enable the OpenSSH daemon.
+services.openssh = {
+  enable = true;
+  ports = [ 65522 ];
+  settings = {
+    PasswordAuthentication = true;
+    PermitRootLogin = "no"; # do not allow to login as root user
+    KbdInteractiveAuthentication = false;
+  };
+};
+```
+
+#### 7.8 Firewall settings <sup>[[doc]](https://wiki.nixos.org/wiki/Firewall)</sup>
+
+https://github.com/ruslanbay/nixos-hyperv/blob/main/configuration.nix?plain=1#L154
+
+```nix
+# Open ports in the firewall.
+networking.firewall.enable = true;
+networking.firewall.allowedTCPPorts = [ 65522 ];
+networking.firewall.allowedUDPPorts = [  ];
+networking.enableIPv6 = false;
+```
+
+#### 7.9 DNS-over-HTTPS <sup>[[doc]](https://wiki.nixos.org/wiki/Encrypted_DNS)</sup>
+
+https://github.com/ruslanbay/nixos-hyperv/blob/main/configuration.nix?plain=1#L160
+
+```nix
+# Setup DNS-over-HTTPS using dnscrypt-proxy
+# Make sure you don't have services.resolved.enable on.
+services.resolved.enable = false;
+
+networking = {
+  nameservers = [ "127.0.0.1" "::1" ];
+  # If using dhcpcd:
+  # dhcpcd.extraConfig = "nohook resolv.conf";
+  # If using NetworkManager:
+  # networkmanager.dns = "none";
+};
+
+services.dnscrypt-proxy2.enable = true;
+services.dnscrypt-proxy2.settings = {
+  ipv6_servers = false;
+  server_names = [
+    "quad9-dnscrypt-ip4-filter-pri"
+    "quad9-dnscrypt-ip4-filter-ecs-pri"
+  ];
+  sources.public-resolvers = {
+    urls = [ "https://raw.githubusercontent.com/DNSCrypt/dnscrypt-resolvers/master/v3/public-resolvers.md" ];
+    cache_file = "/var/lib/dnscrypt-proxy/public-resolvers.md";
+    minisign_key = "RWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3";
+    refresh_delay = 72;
+    prefix = "";
+  };
+};
+systemd.services.dnscrypt-proxy2.serviceConfig = {
+  StateDirectory = "dnscrypt-proxy";
+  # If you're trying to set up persistence with dnscrypt-proxy2 and it isn't working
+  # because of permission issues, try the following:
+  # StateDirectory = lib.mkForce "";
+  # ReadWritePaths = "/var/lib/dnscrypt-proxy"; # Cache directory for dnscrypt-proxy2, persist this
+};
+```
+
+### 8. Применим изменения и завершим установку <sup>[[doc]](https://nixos.org/manual/nixos/stable/#sec-installation-manual-installing)</sup>
+
+Применим изменения и завершим установку:
 ```bash
 nixos-install
 reboot
 ```
-
-
-rm /mnt/etc/nixos/configuration.nix
-
-
-
-В качестве примера я установил Gnome и Firefox.
-
-В Fedora сначала устанавливал минимально возможный Custom Operating System
-
-Зачем держать то, чем я не пользуюсь на диске, в оперативной памяти, обновлять?
-
-
-Можно установить приложение для отдельного пользователя. В отличии, например, от Windows, где программы чаще всего устанавливается в систему и доступны всем пользователям.
-
-Я хочу изолировать Steam от окружения, которое я использую, например, для доступа к банковским приложениям. NixOS поволяет разделить эти пространства.
-
-https://nixos.org/manual/nixos/stable/#sec-installation-manual
-
-
-
-
+Вы можете в любой момент внести изменения в `/etc/nixos/configuration.nix`. Чтобы их применить вы полните следующую команду:
 
 ```bash
-nixos-generate-config --root /mnt
-nano /mnt/etc/nixos/configuration.nix
-nixos-install
-reboot
-
 # After modifying configuration.nix
 sudo nixos-rebuild switch -I nixos-config=/etc/nixos/configuration.nix
+reboot
 ```
 
-### Gnome
-
-
-### Активируем zRAM
-
-
-### DNS-over-HTTPS (DoH)
-
-Моя машина находится за Firewall, который блокирует подключение к любым портам кроме 443 (HTTPS).
-
-
 ## Ссылки
-Wiki
-..
-
-
-___
-
-Ещё один excuse, к которому некоторые прибегают, чтобы оправдать свою беспечность. Я не достаточно важен чтобы меня взламывать, у меня на компьютере нет никаких ценных данных. Проблема в том, что в последнее время стоимость совершения атаки значительно снизилась.
-
-Identity theft (на русский термин можно перевести как "кража [цифровой] личности"). Набирает обороты. В самом простом случае это может быть создание фейковых профилей в социальных сетях с вашими данными. В худшем случае это может быть вывод средств с ваших банковских аккаунтов, оформление кредитов и прочий фрод.
-
-Мы должны стремиться к развитию безопасных и приватных систем и сервисов.
+ - [NixOS Manual](https://nixos.org/manual/nixos/stable/)
+ - [NixOS Wiki](https://wiki.nixos.org/wiki/NixOS_Wiki)
+ - [Packages search](https://search.nixos.org/packages)
+ - [Options search](https://search.nixos.org/options)
+ - [Github](https://github.com/NixOS/nix)
+ - [nix.dev](https://nix.dev/)
